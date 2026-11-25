@@ -17,11 +17,16 @@ struct HoldKey: Identifiable {
     static var current: HoldKey { find(UserDefaults.standard.string(forKey: "holdKey") ?? "shift") }
 }
 
+// Not @State: in the macOS 27 SDK that is a macro whose plugin ships only with full Xcode.
+final class WelcomeState: ObservableObject {
+    @Published var held = false
+    @Published var trusted = AXIsProcessTrusted()
+    @Published var finderOn = FIFinderSyncController.isExtensionEnabled
+}
+
 struct Welcome: View {
     @AppStorage("holdKey") var holdKey = "shift"
-    @State var held = false
-    @State var trusted = AXIsProcessTrusted()
-    @State var finderOn = FIFinderSyncController.isExtensionEnabled
+    @StateObject var state = WelcomeState()
     let done: () -> Void
     let tick = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
@@ -35,8 +40,8 @@ struct Welcome: View {
             row {
                 Text(key.symbol).font(.system(size: 26, weight: .medium))
                     .frame(width: 56, height: 56)
-                    .foregroundStyle(held ? .white : .primary)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(held ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary)))
+                    .foregroundStyle(state.held ? .white : .primary)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(state.held ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary)))
                     .accessibilityLabel("\(key.name) key")
             } text: {
                 Text("Hold \(key.name) while opening an app").font(.headline)
@@ -53,19 +58,19 @@ struct Welcome: View {
             } text: {
                 Text("Or right-click the app").font(.headline)
                 Text("Open in Full Screen is the first option. In the Dock, the usual choices are under More Dock Options, or Option-right-click.").foregroundStyle(.secondary)
-                if !finderOn {
+                if !state.finderOn {
                     Button("Add to Finder's menu…") { FIFinderSyncController.showExtensionManagementInterface() }.padding(.top, 4)
                 }
             }
             row {
-                Image(systemName: trusted ? "checkmark.circle.fill" : "lock.fill").font(.system(size: 24))
-                    .foregroundStyle(trusted ? .green : .orange)
+                Image(systemName: state.trusted ? "checkmark.circle.fill" : "lock.fill").font(.system(size: 24))
+                    .foregroundStyle(state.trusted ? .green : .orange)
                     .frame(width: 56, height: 56)
                     .background(RoundedRectangle(cornerRadius: 12).fill(.quaternary))
             } text: {
-                Text(trusted ? "Accessibility is on" : "Allow Accessibility").font(.headline)
+                Text(state.trusted ? "Accessibility is on" : "Allow Accessibility").font(.headline)
                 Text("Used to see which app you clicked and to make its window full screen. Nothing leaves your Mac.").foregroundStyle(.secondary)
-                if !trusted {
+                if !state.trusted {
                     Button("Allow…") {
                         let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
                         _ = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
@@ -82,9 +87,9 @@ struct Welcome: View {
         .padding(28)
         .frame(width: 500)
         .onReceive(tick) { _ in
-            held = CGEventSource.flagsState(.combinedSessionState).contains(key.cg)
-            trusted = AXIsProcessTrusted()
-            finderOn = FIFinderSyncController.isExtensionEnabled
+            state.held = CGEventSource.flagsState(.combinedSessionState).contains(key.cg)
+            state.trusted = AXIsProcessTrusted()
+            state.finderOn = FIFinderSyncController.isExtensionEnabled
         }
     }
 

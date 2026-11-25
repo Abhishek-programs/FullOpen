@@ -10,20 +10,22 @@ Open any Mac app straight into full screen.
 
 ## Install
 
-Needs macOS 14 or later, Apple Silicon, and the Xcode Command Line Tools (`xcode-select --install`).
+Paste this in Terminal:
 
 ```bash
-git clone https://github.com/Abhishek-programs/FullOpen.git
-cd FullOpen
-./build.sh
+curl -fsSL https://raw.githubusercontent.com/Abhishek-programs/FullOpen/main/install.sh | zsh
 ```
 
-This builds FullOpen, puts it in **Applications** and opens it. The welcome screen then asks for two things:
+It downloads the source, builds it on your Mac, puts FullOpen in **Applications** and opens it. [Read the script first](install.sh) if you like; it's short. Or clone the repo and run `./build.sh`.
+
+Needs macOS 14 or later, Apple Silicon, and Apple's Command Line Tools (`xcode-select --install`). You don't need the full Xcode app.
+
+The welcome screen then asks for two things:
 
 1. **Accessibility**, so it can work at all.
 2. **The Finder extension**, if you want the option in Finder's own menu.
 
-The build is ad-hoc signed, so macOS forgets the Accessibility permission after every rebuild. Clear the stale entry, then allow it again:
+The build is ad-hoc signed, so macOS forgets the Accessibility permission after every rebuild or update. Clear the stale entry, then allow it again:
 
 ```bash
 tccutil reset Accessibility com.abhishek.fullopen
