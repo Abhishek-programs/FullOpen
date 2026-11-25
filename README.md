@@ -38,6 +38,7 @@ Accessibility is a broad permission, so here is all of it:
 - Finds the opened app's window and sets it to full screen.
 - Listens for mouse clicks. On a right-click it checks whether an app in the Dock or a launcher is underneath. Other clicks pass through unchanged.
 - Writes the names of apps you right-click there to the local system log.
+- With `defaults write com.abhishek.fullopen debug -bool true` (off by default), also logs the on-screen labels it looked at, for reporting a missed app.
 
 It has no network code. It checks whether your hold key is down, and reads no other keys. The source is about 500 lines of Swift with no dependencies.
 

@@ -12,7 +12,8 @@ func axGet(_ e: AXUIElement, _ attribute: String) -> CFTypeRef? {
 // MARK: Which app is under the cursor?
 
 /// Finder is absent on purpose: it has its own extension in FinderMenu/.
-let launchers: Set = ["com.apple.dock", "com.apple.Spotlight", "com.apple.apps.launcher",
+/// com.apple.campo is search on macOS 27 (Siri AI); com.apple.Spotlight is search before that.
+let launchers: Set = ["com.apple.dock", "com.apple.campo", "com.apple.Spotlight", "com.apple.apps.launcher",
                           "com.raycast.macos", "com.runningwithcrayons.Alfred"]
 
 func installedApps() -> [String: URL] {
@@ -33,9 +34,20 @@ func plainName(_ s: String) -> String {
     (s.hasSuffix(".app") ? String(s.dropLast(4)) : s).trimmingCharacters(in: .whitespaces).lowercased()
 }
 
-/// Launchers label rows "Safari" or "Safari, Application".
+/// Launchers label rows "Safari", "Safari, Application" or "Safari — Application".
 func matchApp(_ label: String, in apps: [String: URL]) -> URL? {
-    apps[plainName(label)] ?? label.firstIndex(of: ",").flatMap { apps[plainName(String(label[..<$0]))] }
+    if let url = apps[plainName(label)] { return url }
+    for separator in [",", " — ", " – ", " - ", " · ", "\n"] {
+        if let r = label.range(of: separator), let url = apps[plainName(String(label[..<r.lowerBound]))] { return url }
+    }
+    return nil
+}
+
+/// A match counts if it shares a row or cell with the cursor, so a file result never picks an app elsewhere in the list.
+func sameRow(_ match: CGRect?, container: CGRect?, cursor: CGPoint) -> Bool {
+    if let container, container.height <= 160 { return true }
+    guard let match else { return false }
+    return cursor.y >= match.minY - 10 && cursor.y <= match.maxY + 10
 }
 
 func appURL(_ e: AXUIElement) -> URL? {
@@ -54,41 +66,52 @@ func appUnder(_ p: CGPoint) -> Hit? {
     guard AXUIElementCopyElementAtPosition(system, Float(p.x), Float(p.y), &hit) == .success, let hit else { return nil }
     var pid: pid_t = 0
     AXUIElementGetPid(hit, &pid)
-    guard let owner = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
-          launchers.contains(owner) else { return nil }
+    guard let owner = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, launchers.contains(owner) else {
+        if UserDefaults.standard.bool(forKey: "debug") { log.notice("ignored: pid \(pid)") }
+        return nil
+    }
+
+    // Leave the search field's own menu (Paste and so on) alone.
+    let textRoles = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
+    if let role = axGet(hit, kAXRoleAttribute) as? String, textRoles.contains(role) { return nil }
 
     let apps = installedApps()
+    let debug = UserDefaults.standard.bool(forKey: "debug")
+    let labels = [kAXTitleAttribute, kAXValueAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
     // The whole lookup runs while the click waits, so it must end quickly.
     let deadline = Date().addingTimeInterval(0.3)
     var level: AXUIElement? = hit
-    for _ in 0..<5 {
+    for depthUp in 0..<6 {
         guard let e = level, Date() < deadline else { break }
+        let container = axFrame(e)
         var matches: Set<URL> = []
         var queue = [(e, 0)]
         var seen = 0
-        while !queue.isEmpty, seen < 25, Date() < deadline {
+        while !queue.isEmpty, seen < 40, Date() < deadline {
             let (node, depth) = queue.removeFirst()
             seen += 1
-            if let url = appURL(node) {
-                matches.insert(url)
-            } else {
-                for a in [kAXTitleAttribute, kAXValueAttribute, kAXDescriptionAttribute] {
-                    if let s = axGet(node, a) as? String, let url = matchApp(s, in: apps) { matches.insert(url) }
-                }
+            var raw: CFArray?
+            AXUIElementCopyMultipleAttributeValues(
+                node, [kAXRoleAttribute, kAXChildrenAttribute, kAXIdentifierAttribute] + labels as CFArray, [], &raw)
+            guard let values = raw as? [AnyObject], values.count == 3 + labels.count else { continue }
+            let role = values[0] as? String ?? "?"
+            if textRoles.contains(role) { continue }
+            let texts = values[3...].compactMap { $0 as? String ?? ($0 as? NSAttributedString)?.string }
+            if debug {
+                log.notice("up \(depthUp) down \(depth) \(role, privacy: .public) id=\(values[2] as? String ?? "", privacy: .public) \(texts, privacy: .public)")
             }
-            if depth < 3, let kids = axGet(node, kAXChildrenAttribute) as? [AXUIElement] {
-                queue += kids.map { ($0, depth + 1) }
-            }
+            if let url = appURL(node) ?? texts.lazy.compactMap({ matchApp($0, in: apps) }).first,
+               sameRow(axFrame(node), container: container, cursor: p) { matches.insert(url) }
+            if depth < 4, let kids = values[1] as? [AXUIElement] { queue += kids.map { ($0, depth + 1) } }
         }
-        if matches.count > 1 { break } // climbed into a list of several apps
+        if matches.count > 1 { break } // climbed into a row of several apps
         if let url = matches.first {
             log.info("right-click in \(owner, privacy: .public): \(url.lastPathComponent, privacy: .public)")
             return Hit(url: url, owner: owner, element: hit)
         }
         level = axGet(e, kAXParentAttribute).map { $0 as! AXUIElement }
     }
-    let role = axGet(hit, kAXRoleAttribute) as? String ?? "?"
-    log.info("right-click in \(owner, privacy: .public): no app, role \(role, privacy: .public)")
+    log.notice("right-click in \(owner, privacy: .public): no app found")
     return nil
 }
 
