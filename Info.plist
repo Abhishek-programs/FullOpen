@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+	<key>CFBundleExecutable</key><string>FullOpen</string>
+	<key>CFBundleIdentifier</key><string>com.abhishek.fullopen</string>
+	<key>CFBundleName</key><string>FullOpen</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>0.2</string>
+	<key>CFBundleVersion</key><string>2</string>
+	<key>LSMinimumSystemVersion</key><string>14.0</string>
+	<key>LSUIElement</key><true/>
+	<key>NSServices</key><array><dict>
+		<key>NSMenuItem</key><dict><key>default</key><string>Open in Full Screen</string></dict>
+		<key>NSMessage</key><string>openFullScreen</string>
+		<key>NSPortName</key><string>FullOpen</string>
+		<key>NSSendFileTypes</key><array><string>com.apple.application-bundle</string></array>
+		<key>NSRequiredContext</key><dict/>
+	</dict></array>
+</dict></plist>
